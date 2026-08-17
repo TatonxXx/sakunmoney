@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบแปลงสกุลเงิน</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 30px;
+        }
+
+        .container {
+            max-width: 700px;
+            margin: auto;
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+        }
+
+        h1, h2 {
+            text-align: center;
+        }
+
+        .currency-box {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .currency {
+            flex: 1;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: bold;
+        }
+
+        input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px;
+            font-size: 18px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+        }
+
+        .rate {
+            text-align: center;
+            padding: 12px;
+            background: #eee;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .clear {
+            background: #ddd;
+            margin-top: 10px;
+        }
+
+        .history {
+            margin-top: 25px;
+        }
+
+        .history-item {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .time {
+            font-size: 12px;
+            color: #777;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>ระบบแปลงสกุลเงิน</h1>
+
+    <div class="currency-box">
+
+        <div class="currency">
+            <label>THB</label>
+            <input
+                type="number"
+                id="amountOne"
+                placeholder="จำนวนเงินบาท"
+                oninput="convertFromTHB()"
+            >
+        </div>
+
+        <div class="currency">
+            <label>USD</label>
+            <input
+                type="number"
+                id="amountTwo"
+                placeholder="จำนวนดอลลาร์"
+                oninput="convertFromUSD()"
+            >
+        </div>
+
+    </div>
+
+    <div class="rate">
+        อัตราแลกเปลี่ยนปัจจุบัน:
+        <strong>1,000 THB → 28.17 USD</strong>
+        <br>
+        <span id="rateTime"></span>
+    </div>
+
+    <div class="history">
+        <h2>ประวัติการแปลงเงินย้อนหลัง 10 รายการล่าสุด</h2>
+
+        <div id="historyList"></div>
+
+        <button class="clear" onclick="clearHistory()">
+            ล้างข้อมูล
+        </button>
+    </div>
+
+</div>
+
+<script>
+    // 1,000 THB = 28.17 USD
+    const THB_TO_USD = 28.17 / 1000;
+    const USD_TO_THB = 1000 / 28.17;
+
+    let saveTimer = null;
+    let lastConversion = null;
+
+    // แปลงจาก THB -> USD
+    function convertFromTHB() {
+        const thb = parseFloat(document.getElementById("amountOne").value);
+
+        if (isNaN(thb)) {
+            document.getElementById("amountTwo").value = "";
+            lastConversion = null;
+            return;
+        }
+
+        const usd = thb * THB_TO_USD;
+
+        document.getElementById("amountTwo").value =
+            usd.toFixed(2);
+
+        prepareSave(thb, usd);
+    }
+
+    // แปลงจาก USD -> THB
+    function convertFromUSD() {
+        const usd = parseFloat(document.getElementById("amountTwo").value);
+
+        if (isNaN(usd)) {
+            document.getElementById("amountOne").value = "";
+            lastConversion = null;
+            return;
+        }
+
+        const thb = usd * USD_TO_THB;
+
+        document.getElementById("amountOne").value =
+            thb.toFixed(2);
+
+        prepareSave(thb, usd);
+    }
+
+    // เตรียมบันทึกประวัติหลัง 5 วินาที
+    function prepareSave(thb, usd) {
+        lastConversion = {
+            thb: thb,
+            usd: usd
+        };
+
+        clearTimeout(saveTimer);
+
+        saveTimer = setTimeout(function () {
+            if (lastConversion !== null) {
+                saveHistory(
+                    lastConversion.thb,
+                    lastConversion.usd
+                );
+            }
+        }, 5000);
+    }
+
+    // บันทึกประวัติ
+    function saveHistory(thb, usd) {
+        let history =
+            JSON.parse(localStorage.getItem("currencyHistory")) || [];
+
+        const record = {
+            thb: thb,
+            usd: usd,
+            time: new Date().toLocaleString("th-TH")
+        };
+
+        history.unshift(record);
+
+        // เก็บไว้เพียง 10 รายการล่าสุด
+        history = history.slice(0, 10);
+
+        localStorage.setItem(
+            "currencyHistory",
+            JSON.stringify(history)
+        );
+
+        displayHistory();
+
+        lastConversion = null;
+    }
+
+    // แสดงประวัติ
+    function displayHistory() {
+        const historyList =
+            document.getElementById("historyList");
+
+        const history =
+            JSON.parse(localStorage.getItem("currencyHistory")) || [];
+
+        historyList.innerHTML = "";
+
+        history.forEach(function(item) {
+
+            const div = document.createElement("div");
+
+            div.className = "history-item";
+
+            div.innerHTML = `
+                ${Number(item.thb).toFixed(2)} THB
+                → 
+                ${Number(item.usd).toFixed(2)} USD
+                <div class="time">
+                    ${item.time}
+                </div>
+            `;
+
+            historyList.appendChild(div);
+        });
+    }
+
+    // ล้างข้อมูลทั้งหมด
+    function clearHistory() {
+        clearTimeout(saveTimer);
+
+        localStorage.removeItem("currencyHistory");
+
+        document.getElementById("amountOne").value = "";
+        document.getElementById("amountTwo").value = "";
+
+        lastConversion = null;
+
+        displayHistory();
+    }
+
+    // แสดงเวลาปัจจุบัน
+    function updateRateTime() {
+        document.getElementById("rateTime").textContent =
+            "อัปเดตล่าสุด: " +
+            new Date().toLocaleString("th-TH");
+    }
+
+    // โหลดประวัติเมื่อเปิดหน้า
+    displayHistory();
+    updateRateTime();
+</script>
+
+</body>
+</html>
