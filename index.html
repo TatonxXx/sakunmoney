@@ -8,7 +8,7 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            background: #f5f5f5;
+            background: #f5f7fa;
             margin: 0;
             padding: 30px;
         }
@@ -18,21 +18,16 @@
             margin: auto;
             background: white;
             padding: 25px;
-            border-radius: 10px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
 
         h1, h2 {
             text-align: center;
         }
 
-        .currency-box {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-
-        .currency {
-            flex: 1;
+        .box {
+            margin-bottom: 15px;
         }
 
         label {
@@ -43,47 +38,52 @@
 
         input {
             width: 100%;
-            box-sizing: border-box;
             padding: 12px;
-            font-size: 18px;
+            box-sizing: border-box;
             border: 1px solid #ccc;
             border-radius: 6px;
-        }
-
-        .rate {
-            text-align: center;
-            padding: 12px;
-            background: #eee;
-            border-radius: 6px;
-            margin-bottom: 20px;
+            font-size: 16px;
         }
 
         button {
-            width: 100%;
-            padding: 12px;
+            padding: 10px 16px;
             border: none;
             border-radius: 6px;
-            font-size: 16px;
             cursor: pointer;
+            margin: 5px;
+            font-size: 15px;
+        }
+
+        .reset {
+            background: #3498db;
+            color: white;
         }
 
         .clear {
-            background: #ddd;
-            margin-top: 10px;
+            background: #e74c3c;
+            color: white;
         }
 
-        .history {
-            margin-top: 25px;
+        .status {
+            text-align: center;
+            margin: 15px 0;
+            color: #555;
         }
 
-        .history-item {
-            padding: 10px;
-            border-bottom: 1px solid #ddd;
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
         }
 
-        .time {
-            font-size: 12px;
-            color: #777;
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+
+        th {
+            background: #eee;
         }
     </style>
 </head>
@@ -94,192 +94,208 @@
 
     <h1>ระบบแปลงสกุลเงิน</h1>
 
-    <div class="currency-box">
-
-        <div class="currency">
-            <label>THB</label>
-            <input
-                type="number"
-                id="amountOne"
-                placeholder="จำนวนเงินบาท"
-                oninput="convertFromTHB()"
-            >
-        </div>
-
-        <div class="currency">
-            <label>USD</label>
-            <input
-                type="number"
-                id="amountTwo"
-                placeholder="จำนวนดอลลาร์"
-                oninput="convertFromUSD()"
-            >
-        </div>
-
+    <div class="box">
+        <label>THB (บาท)</label>
+        <input type="number" id="thb" placeholder="กรอกจำนวน THB">
     </div>
 
-    <div class="rate">
-        อัตราแลกเปลี่ยนปัจจุบัน:
-        <strong>1,000 THB → 28.17 USD</strong>
-        <br>
-        <span id="rateTime"></span>
+    <div class="box">
+        <label>USD (ดอลลาร์)</label>
+        <input type="number" id="usd" placeholder="กรอกจำนวน USD">
     </div>
 
-    <div class="history">
-        <h2>ประวัติการแปลงเงินย้อนหลัง 10 รายการล่าสุด</h2>
+    <div class="box">
+        <label>อัตราแลกเปลี่ยน</label>
+        <input type="number" id="rate" value="0.02817" step="0.00001">
+    </div>
 
-        <div id="historyList"></div>
+    <div style="text-align:center;">
+        <button class="reset" onclick="resetNumbers()">
+            ล้างตัวเลขเป็นค่าเริ่มต้น
+        </button>
 
         <button class="clear" onclick="clearHistory()">
             ล้างข้อมูล
         </button>
     </div>
 
+    <div class="status" id="status">
+        พร้อมใช้งาน
+    </div>
+
+    <h2>ประวัติการแปลงเงิน 10 รายการล่าสุด</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>THB</th>
+                <th>USD</th>
+                <th>อัตราแลกเปลี่ยน</th>
+                <th>เวลา</th>
+            </tr>
+        </thead>
+
+        <tbody id="history"></tbody>
+    </table>
+
 </div>
 
 <script>
-    // 1,000 THB = 28.17 USD
-    const THB_TO_USD = 28.17 / 1000;
-    const USD_TO_THB = 1000 / 28.17;
+
+    const thbInput = document.getElementById("thb");
+    const usdInput = document.getElementById("usd");
+    const rateInput = document.getElementById("rate");
+    const historyTable = document.getElementById("history");
+    const statusText = document.getElementById("status");
+
+    const defaultRate = 0.02817;
+
+    let history = JSON.parse(localStorage.getItem("currencyHistory")) || [];
 
     let saveTimer = null;
-    let lastConversion = null;
 
-    // แปลงจาก THB -> USD
-    function convertFromTHB() {
-        const thb = parseFloat(document.getElementById("amountOne").value);
+    // แปลง THB -> USD
+    thbInput.addEventListener("input", function () {
 
-        if (isNaN(thb)) {
-            document.getElementById("amountTwo").value = "";
-            lastConversion = null;
+        if (this.value === "") {
+            usdInput.value = "";
             return;
         }
 
-        const usd = thb * THB_TO_USD;
+        const thb = parseFloat(this.value);
+        const rate = parseFloat(rateInput.value);
 
-        document.getElementById("amountTwo").value =
-            usd.toFixed(2);
+        if (!isNaN(thb) && !isNaN(rate)) {
+            usdInput.value = (thb * rate).toFixed(2);
+            scheduleSave();
+        }
+    });
 
-        prepareSave(thb, usd);
-    }
+    // แปลง USD -> THB
+    usdInput.addEventListener("input", function () {
 
-    // แปลงจาก USD -> THB
-    function convertFromUSD() {
-        const usd = parseFloat(document.getElementById("amountTwo").value);
-
-        if (isNaN(usd)) {
-            document.getElementById("amountOne").value = "";
-            lastConversion = null;
+        if (this.value === "") {
+            thbInput.value = "";
             return;
         }
 
-        const thb = usd * USD_TO_THB;
+        const usd = parseFloat(this.value);
+        const rate = parseFloat(rateInput.value);
 
-        document.getElementById("amountOne").value =
-            thb.toFixed(2);
+        if (!isNaN(usd) && !isNaN(rate) && rate !== 0) {
+            thbInput.value = (usd / rate).toFixed(2);
+            scheduleSave();
+        }
+    });
 
-        prepareSave(thb, usd);
-    }
+    // เมื่อเปลี่ยนอัตราแลกเปลี่ยน
+    rateInput.addEventListener("input", function () {
 
-    // เตรียมบันทึกประวัติหลัง 5 วินาที
-    function prepareSave(thb, usd) {
-        lastConversion = {
-            thb: thb,
-            usd: usd
-        };
+        const rate = parseFloat(this.value);
+
+        if (isNaN(rate) || rate <= 0) {
+            return;
+        }
+
+        if (thbInput.value !== "") {
+            const thb = parseFloat(thbInput.value);
+            usdInput.value = (thb * rate).toFixed(2);
+        }
+        else if (usdInput.value !== "") {
+            const usd = parseFloat(usdInput.value);
+            thbInput.value = (usd / rate).toFixed(2);
+        }
+
+        scheduleSave();
+    });
+
+    // บันทึกหลังจากหยุดกรอก 5 วินาที
+    function scheduleSave() {
 
         clearTimeout(saveTimer);
 
+        statusText.textContent = "รอบันทึกประวัติ 5 วินาที...";
+
         saveTimer = setTimeout(function () {
-            if (lastConversion !== null) {
-                saveHistory(
-                    lastConversion.thb,
-                    lastConversion.usd
-                );
+
+            if (thbInput.value === "" || usdInput.value === "") {
+                return;
             }
+
+            const record = {
+                thb: parseFloat(thbInput.value),
+                usd: parseFloat(usdInput.value),
+                rate: parseFloat(rateInput.value),
+                time: new Date().toLocaleString("th-TH")
+            };
+
+            history.unshift(record);
+
+            // เก็บเฉพาะ 10 รายการล่าสุด
+            history = history.slice(0, 10);
+
+            localStorage.setItem(
+                "currencyHistory",
+                JSON.stringify(history)
+            );
+
+            renderHistory();
+
+            statusText.textContent = "บันทึกประวัติเรียบร้อยแล้ว";
+
         }, 5000);
     }
 
-    // บันทึกประวัติ
-    function saveHistory(thb, usd) {
-        let history =
-            JSON.parse(localStorage.getItem("currencyHistory")) || [];
-
-        const record = {
-            thb: thb,
-            usd: usd,
-            time: new Date().toLocaleString("th-TH")
-        };
-
-        history.unshift(record);
-
-        // เก็บไว้เพียง 10 รายการล่าสุด
-        history = history.slice(0, 10);
-
-        localStorage.setItem(
-            "currencyHistory",
-            JSON.stringify(history)
-        );
-
-        displayHistory();
-
-        lastConversion = null;
-    }
-
     // แสดงประวัติ
-    function displayHistory() {
-        const historyList =
-            document.getElementById("historyList");
+    function renderHistory() {
 
-        const history =
-            JSON.parse(localStorage.getItem("currencyHistory")) || [];
+        historyTable.innerHTML = "";
 
-        historyList.innerHTML = "";
+        history.forEach(function(record) {
 
-        history.forEach(function(item) {
+            const row = document.createElement("tr");
 
-            const div = document.createElement("div");
-
-            div.className = "history-item";
-
-            div.innerHTML = `
-                ${Number(item.thb).toFixed(2)} THB
-                → 
-                ${Number(item.usd).toFixed(2)} USD
-                <div class="time">
-                    ${item.time}
-                </div>
+            row.innerHTML = `
+                <td>${record.thb.toFixed(2)}</td>
+                <td>${record.usd.toFixed(2)}</td>
+                <td>${record.rate}</td>
+                <td>${record.time}</td>
             `;
 
-            historyList.appendChild(div);
+            historyTable.appendChild(row);
         });
     }
 
-    // ล้างข้อมูลทั้งหมด
-    function clearHistory() {
+    // ล้างตัวเลขเป็นค่าเริ่มต้น
+    function resetNumbers() {
+
         clearTimeout(saveTimer);
+
+        thbInput.value = "";
+        usdInput.value = "";
+        rateInput.value = defaultRate;
+
+        statusText.textContent = "คืนค่าเป็นค่าเริ่มต้นแล้ว";
+    }
+
+    // ล้างประวัติทั้งหมด
+    function clearHistory() {
+
+        clearTimeout(saveTimer);
+
+        history = [];
 
         localStorage.removeItem("currencyHistory");
 
-        document.getElementById("amountOne").value = "";
-        document.getElementById("amountTwo").value = "";
+        renderHistory();
 
-        lastConversion = null;
-
-        displayHistory();
+        statusText.textContent = "ล้างข้อมูลประวัติแล้ว";
     }
 
-    // แสดงเวลาปัจจุบัน
-    function updateRateTime() {
-        document.getElementById("rateTime").textContent =
-            "อัปเดตล่าสุด: " +
-            new Date().toLocaleString("th-TH");
-    }
+    renderHistory();
 
-    // โหลดประวัติเมื่อเปิดหน้า
-    displayHistory();
-    updateRateTime();
 </script>
 
 </body>
 </html>
+```
